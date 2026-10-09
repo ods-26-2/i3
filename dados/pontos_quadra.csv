@@ -1,0 +1,16 @@
+# correspondencias imagem <-> mundo para o i3 -- quadra de volei FIVB, 18 x 9 m
+# origem no canto proximo esquerdo; x ao longo dos 18 m, y afastando da camera
+# u,v sao ESTIMATIVA, medida no olho em dados/quadra_limpa.png.
+# conferir e corrigir rodando conferir_quadra.py -- ele desenha a quadra de volta.
+# uso: ajuste (entra no calculo) | holdout (so mede o erro) | pular (ocluso)
+u,v,x,y,uso,ponto
+96,592,0,0,ajuste,canto proximo esquerdo
+1179,605,18,0,ajuste,canto proximo direito
+955,443,18,9,ajuste,canto distante direito
+310,443,0,9,ajuste,canto distante esquerdo
+460,598,6,0,ajuste,ataque proximo esquerdo
+749,444,12,9,ajuste,ataque distante direito
+532,444,6,9,holdout,ataque distante esquerdo
+820,600,12,0,holdout,ataque proximo direito
+647,591,9,0,pular,central proxima -- poste da rede tapa
+639,447,9,9,pular,central distante -- cadeira do arbitro tapa
