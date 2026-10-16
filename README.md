@@ -18,11 +18,13 @@ docker run -i --rm inv-i3 --kafka 34.66.235.91:9093 < dados/pontos_quadra.csv   
 
 Entrada (stdin): o csv de `dados/pontos_quadra.csv` (`u,v,x,y,uso,ponto`; `uso` é
 `ajuste`, `holdout` ou `pular`). Saída: **um** evento JSON no stdout, ou no tópico de mesmo nome com `--kafka`,
-`ods.visao.calibracao_publicada`, no formato de `docs/INV-1_interfaces.md`. É artefato: grava em
-arquivo e quem consome lê quando quiser. Opções: `--camera-id`, `--versao`,
-`--valido-desde`, `--espaco`.
+`ods.i3.calibration`, no envelope e no payload da arquitetura 6c. É artefato: grava em
+arquivo e quem consome lê quando quiser. Opções: `--source-id`, `--versao` (padrão
+`cal-<source_id>-1`), `--largura`, `--altura`, `--valido-desde`, `--espaco`.
 
-Entra vídeo já corrigido de distorção (P4, SIS-2). Consumidores: S1, S5, A4, A8.
+Na 6c o P4 entrega o quadro bruto, então o artefato leva intrínsecos e distorção. Hoje a focal
+sai dos próprios pontos da quadra (uma vista, centro no meio, distorção zero); na Jetson a
+lente é fixa e a calibração com tabuleiro é feita uma vez. Consumidores: S1, S5, I9, A4, A8.
 
 **Entrada** `Correspondencia(pixel, mundo)`
 

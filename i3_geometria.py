@@ -1,6 +1,7 @@
 """i3 geometria e calibracao -- sprint 2"""
 from collections import namedtuple
 
+import cv2
 import numpy as np
 
 # entrada, pixel em px e mundo em metros
@@ -92,6 +93,26 @@ def calibrar_com_holdout(correspondencias, n_holdout=2):
     return H, rms_cm, ajuste, holdout
 
 
+def intrinsecos(correspondencias, largura, altura):
+    """focal da camera a partir dos pontos da quadra; centro otico e distorcao fixos
+
+    card A4.0b · intrinsecos obrigatorios da 6c -- sprint 3 (Jose)
+    """
+    # ponytail: uma vista so do plano da quadra, entao so a focal e estimavel; centro no
+    # meio e distorcao zero. na jetson a lente e fixa: calibrar uma vez com tabuleiro
+    # (varias vistas) e ler o resultado em vez de estimar aqui
+    mundo = np.array([[(x, y, 0.0) for _, (x, y) in correspondencias]], np.float32)
+    pixel = np.array([[p for p, _ in correspondencias]], np.float32)
+    K0 = np.array([[largura, 0, largura / 2], [0, largura, altura / 2], [0, 0, 1]], float)
+    fixo = (cv2.CALIB_USE_INTRINSIC_GUESS | cv2.CALIB_FIX_PRINCIPAL_POINT
+            | cv2.CALIB_FIX_ASPECT_RATIO | cv2.CALIB_ZERO_TANGENT_DIST
+            | cv2.CALIB_FIX_K1 | cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3)
+    _, K, dist, _, _ = cv2.calibrateCamera(mundo, pixel, (largura, altura), K0, None, flags=fixo)
+    return ({"fx": round(K[0, 0], 1), "fy": round(K[1, 1], 1),
+             "cx": round(K[0, 2], 1), "cy": round(K[1, 2], 1)},
+            [round(float(c), 6) for c in dist.ravel()[:5]])
+
+
 def pixel_para_mundo(H, pixel):
     """converte ponto da imagem em ponto do plano
     card I3.2 · conversao pixel -> quadra -- sprint 2, etapa 8 (Jose)
@@ -130,3 +151,17 @@ def publicar_artefato(camera_id, correspondencias, referencial, valido_desde, ve
     """calibra com ajuste + holdout e publica o artefato completo do README."""
     H, rms_cm, _, _ = calibrar_com_holdout(correspondencias, n_holdout=n_holdout)
     return publicar(camera_id, H, rms_cm, referencial, valido_desde, versao)
+
+
+if __name__ == "__main__":
+    # camera conhecida (f = 1000, 1280x720) olhando a quadra de cima e de lado:
+    # intrinsecos tem que achar a mesma focal a partir so dos pontos projetados
+    K = np.array([[1000.0, 0, 640], [0, 1000.0, 360], [0, 0, 1]])
+    rvec, tvec = np.array([[1.9], [0.0], [0.0]]), np.array([[-9.0], [3.0], [16.0]])
+    quadra = [(x, y) for x in (0, 6, 9, 12, 18) for y in (0, 9)]
+    proj, _ = cv2.projectPoints(np.array([(x, y, 0.0) for x, y in quadra]), rvec, tvec, K, None)
+    pares = [Correspondencia(tuple(p), m) for p, m in zip(proj.reshape(-1, 2), quadra)]
+    k, d = intrinsecos(pares, 1280, 720)
+    assert abs(k["fx"] - 1000) < 20, k
+    assert (k["cx"], k["cy"], d) == (640, 360, [0.0] * 5), (k, d)
+    print("intrinsecos ok")
