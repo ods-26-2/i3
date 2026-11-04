@@ -19,6 +19,34 @@ from i3_geometria import Correspondencia, calibrar, erro_reprojecao_cm, intrinse
 
 
 TOPICO = "ods.i3.calibration"
+ANUNCIO = "ods.artifact.published"
+
+
+def registrar(ev, raiz):
+    """6c, ciclo de vida do artefato: o dono grava o CALIBRATION no registro com o descritor
+    comum. pasta no formato do registro (registry://<caminho> = <raiz>/<caminho>), a mesma
+    que o a4 usa para as zonas e o s1 le em S1_REGISTRY_DIR. versao nao muda: se ja existe, erro"""
+    import hashlib
+    from pathlib import Path
+    versao = ev["artifact_version"]
+    caminho = f"i3/calibration/{versao}/content.json"
+    pasta = Path(raiz) / caminho.rsplit("/", 1)[0]
+    if pasta.exists():
+        raise SystemExit(f"i3: {versao} ja esta no registro; versao nao muda (6c), use --versao nova")
+    pasta.mkdir(parents=True)
+    dados = json.dumps(ev["payload"], ensure_ascii=False, indent=2).encode("utf-8")
+    descritor = {"artifact_id": f"cal-{ev['source_id']}", "artifact_version": versao, "kind": "CALIBRATION",
+                 "owner": "I3", "uri": f"registry://{caminho}", "hash_sha256": hashlib.sha256(dados).hexdigest(),
+                 "valid_from": ev["payload"]["valid_from"], "schema_version": "1.0"}
+    (pasta / "content.json").write_bytes(dados)
+    (pasta / "descriptor.json").write_text(json.dumps(descritor, indent=2), encoding="utf-8")
+    return descritor
+
+
+def anuncio(descritor):
+    """envelope de ods.artifact.published; o payload e o descritor"""
+    return {"message_type": "event", "message_id": str(uuid.uuid4()), "schema": ANUNCIO,
+            "schema_version": "1.0", "producer": "I3", "published_at": agora(), "payload": descritor}
 
 
 def agora():
@@ -84,21 +112,29 @@ if __name__ == "__main__":
     p.add_argument("--valido-desde", help="ISO 8601 UTC; padrao e agora")
     p.add_argument("--espaco", default="quadra-volei-fivb")
     p.add_argument("--kafka", metavar="HOST:PORTA", help="publica no broker em vez do stdout")
+    p.add_argument("--registro", metavar="PASTA",
+                   help="registro de artefatos (6c): grava CALIBRATION com descritor; com --kafka, anuncia")
     p.add_argument("--linhas", metavar="IMAGEM",
                    help="mede as linhas da quadra nessa imagem (mediana sem jogadores, medir_linhas.py)")
     a = p.parse_args()
     ev = evento(ler(sys.stdin), a)
     print(f"i3: rms {ev['payload']['reprojection_rms_cm']} cm fora do ajuste, focal {ev['payload']['intrinsics']['fx']} px",
           file=sys.stderr)
+    descritor = registrar(ev, a.registro) if a.registro else None
+    if descritor:
+        print(f"i3: {descritor['uri']} gravado em {a.registro}", file=sys.stderr)
     if a.kafka:
         from confluent_kafka import Producer
         produtor = Producer({"bootstrap.servers": a.kafka})
         falhas = []
-        produtor.produce(TOPICO, key=a.source_id, value=json.dumps(ev).encode(),
-                         on_delivery=lambda erro, _msg: erro and falhas.append(erro))
+        # 6c: o conteudo vai em ods.i3.calibration e a versao e anunciada em ods.artifact.published
+        mensagens = [(TOPICO, ev)] + ([(ANUNCIO, anuncio(descritor))] if descritor else [])
+        for topico, msg in mensagens:
+            produtor.produce(topico, key=a.source_id, value=json.dumps(msg).encode(),
+                             on_delivery=lambda erro, _msg: erro and falhas.append(erro))
         if produtor.flush(10) or falhas:
             raise SystemExit(f"i3: broker {a.kafka} nao confirmou a entrega")
-        print(f"i3: publicado em {TOPICO}", file=sys.stderr)
+        print("i3: publicado em " + ", ".join(t for t, _ in mensagens), file=sys.stderr)
     else:
         json.dump(ev, sys.stdout)
         print()

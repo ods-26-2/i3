@@ -23,7 +23,17 @@ Entrada (stdin): o csv de `dados/pontos_quadra.csv` (`u,v,x,y,uso,ponto`; `uso` 
 `ods.i3.calibration`, no envelope e no payload da arquitetura 6c. É artefato: grava em
 arquivo e quem consome lê quando quiser. Opções: `--source-id`, `--versao` (padrão
 `cal-<source_id>-1`), `--largura`, `--altura`, `--valido-desde`, `--espaco`, `--linhas`
-(mede as linhas da quadra numa imagem; ver o procedimento abaixo).
+(mede as linhas da quadra numa imagem; ver o procedimento abaixo), `--registro PASTA`.
+
+Ciclo de vida do artefato (6c, seção 8): com `--registro`, o CALIBRATION vai para o registro
+com o descritor comum (`artifact_id`, `artifact_version`, `kind`, `owner`, `uri`,
+`hash_sha256`, `valid_from`), em `<PASTA>/i3/calibration/<versao>/`, no formato
+`registry://` que o S1 lê em `S1_REGISTRY_DIR`. Com `--kafka`, o conteúdo sai em
+`ods.i3.calibration` e a versão é anunciada em `ods.artifact.published`. Versão gravada não
+muda: correção é `--versao` nova.
+
+`holdout_points` é o número de pontos de linha medidos fora do ajuste (cada um no seu terço
+de linha); `reprojection_rms_cm` é o rms desses pontos até a sua reta.
 
 Na 6c o P4 entrega o quadro bruto, então o artefato leva intrínsecos e distorção. Hoje a focal
 sai dos próprios pontos da quadra (uma vista, centro no meio, distorção zero); na Jetson a
