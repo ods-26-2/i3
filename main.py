@@ -2,6 +2,7 @@
 
     docker run -i --rm inv-i3 < dados/pontos_quadra.csv > calibracao.json
     docker run -i --rm --network host inv-i3 --kafka localhost:9092 < dados/pontos_quadra.csv
+    python main.py --linhas dados/quadra_mediana.png < dados/pontos_quadra.csv   # linhas medidas
 
 um json por execucao, envelope comum da arquitetura 6c (perfil EV-SINAL, sem captured_at
 e session_id). e artefato: com --kafka vai pro topico ods.i3.calibration, chave source_id;
@@ -35,9 +36,19 @@ def ler(linhas):
 
 
 def evento(marcas, a):
-    H = calibrar(marcas["ajuste"])
-    rms = erro_reprojecao_cm(H, marcas["holdout"]) if marcas["holdout"] else None
-    K, dist = intrinsecos(marcas["ajuste"] + marcas["holdout"], a.largura, a.altura)
+    if a.linhas:
+        # procedimento de bancada: as linhas da quadra medidas na imagem; os pontos do csv
+        # so dizem onde procurar, e o erro e o de tercos de linha que ficaram fora do ajuste
+        import cv2
+        from medir_linhas import calibrar_por_linhas
+        H, rms, cruzamentos, medidos = calibrar_por_linhas(cv2.imread(a.linhas), marcas["ajuste"] + marcas["holdout"])
+        K, dist = intrinsecos(cruzamentos, a.largura, a.altura)
+        n_holdout = sum(medidos.values())
+    else:
+        H = calibrar(marcas["ajuste"])
+        rms = erro_reprojecao_cm(H, marcas["holdout"]) if marcas["holdout"] else None
+        K, dist = intrinsecos(marcas["ajuste"] + marcas["holdout"], a.largura, a.altura)
+        n_holdout = len(marcas["holdout"])
     return {
         "message_type": "event",
         "message_id": str(uuid.uuid4()),
@@ -58,7 +69,7 @@ def evento(marcas, a):
             "reference_frame": {"space_id": a.espaco, "origin": "canto proximo esquerdo",
                                 "axes": "x ao longo dos 18 m, y afastando da camera"},
             "reprojection_rms_cm": None if rms is None else round(rms, 2),
-            "holdout_points": len(marcas["holdout"]),
+            "holdout_points": n_holdout,
         },
     }
 
@@ -73,9 +84,12 @@ if __name__ == "__main__":
     p.add_argument("--valido-desde", help="ISO 8601 UTC; padrao e agora")
     p.add_argument("--espaco", default="quadra-volei-fivb")
     p.add_argument("--kafka", metavar="HOST:PORTA", help="publica no broker em vez do stdout")
+    p.add_argument("--linhas", metavar="IMAGEM",
+                   help="mede as linhas da quadra nessa imagem (mediana sem jogadores, medir_linhas.py)")
     a = p.parse_args()
     ev = evento(ler(sys.stdin), a)
-    print(f"i3: rms {ev['payload']['reprojection_rms_cm']} cm no holdout", file=sys.stderr)
+    print(f"i3: rms {ev['payload']['reprojection_rms_cm']} cm fora do ajuste, focal {ev['payload']['intrinsics']['fx']} px",
+          file=sys.stderr)
     if a.kafka:
         from confluent_kafka import Producer
         produtor = Producer({"bootstrap.servers": a.kafka})

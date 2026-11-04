@@ -14,13 +14,16 @@ Só numpy + cliente Kafka.
 docker build -t inv-i3 .
 docker run -i --rm inv-i3 < dados/pontos_quadra.csv > calibracao.json   # local, em arquivo
 docker run -i --rm inv-i3 --kafka 34.66.235.91:9093 < dados/pontos_quadra.csv   # barramento
+docker run -i --rm -v $PWD/dados:/dados inv-i3 --linhas /dados/quadra_mediana.png \
+    < dados/pontos_quadra.csv > calibracao.json                                  # linhas medidas
 ```
 
 Entrada (stdin): o csv de `dados/pontos_quadra.csv` (`u,v,x,y,uso,ponto`; `uso` é
 `ajuste`, `holdout` ou `pular`). Saída: **um** evento JSON no stdout, ou no tópico de mesmo nome com `--kafka`,
 `ods.i3.calibration`, no envelope e no payload da arquitetura 6c. É artefato: grava em
 arquivo e quem consome lê quando quiser. Opções: `--source-id`, `--versao` (padrão
-`cal-<source_id>-1`), `--largura`, `--altura`, `--valido-desde`, `--espaco`.
+`cal-<source_id>-1`), `--largura`, `--altura`, `--valido-desde`, `--espaco`, `--linhas`
+(mede as linhas da quadra numa imagem; ver o procedimento abaixo).
 
 Na 6c o P4 entrega o quadro bruto, então o artefato leva intrínsecos e distorção. Hoje a focal
 sai dos próprios pontos da quadra (uma vista, centro no meio, distorção zero); na Jetson a
@@ -53,13 +56,28 @@ lente é fixa e a calibração com tabuleiro é feita uma vez. Consumidores: S1,
 
 ## Procedimento de bancada · card I3.3
 
-- O padrão é a própria quadra: cantos e cruzamentos de linha do vôlei FIVB, 18 × 9 m,
-  marcados no olho em `dados/quadra_limpa.png` e anotados em `dados/pontos_quadra.csv`.
-- 8 correspondências: 6 entram no ajuste, 2 ficam de holdout. O erro que vale é o do
-  holdout — medir nos pontos do próprio ajuste é otimista por construção.
-- Conferência: `python conferir_quadra.py` (fora do container; precisa de
-  `pip install numpy opencv-python`) reprojeta as linhas conhecidas por
-  cima da foto e amplia cada ponto 4×, que é a escala em que 2 px se decidem. Corrige o `u,v`
-  no csv, roda de novo, repete até encostar.
-- Medido assim: **rms 0,9 cm no holdout**, 0,3 cm no ajuste. Evidência em
-  `dados/conferencia.png` e `dados/conferencia_zoom.png`. Refazer quando a câmera se mexer.
+O padrão é a própria quadra de vôlei FIVB, 18 × 9 m. As linhas são medidas na imagem, sem
+clique (`medir_linhas.py`, opção `--linhas` do `main.py`):
+
+1. **Câmera fixa.** Conferir que a quadra não anda entre trechos do jogo (na câmera do A4,
+   menos de 1 px em 8 min). Se andar, uma calibração por trecho.
+2. **Imagem sem jogadores.** Mediana de dezenas de quadros espalhados pelo jogo
+   (`dados/quadra_mediana.png`: 80 quadros do vídeo do A4).
+3. **Linhas no subpixel.** A cada 25 cm ao longo de cada linha (laterais, fundos e ataques),
+   um perfil perpendicular acha o centro da faixa branca pelo centróide do brilho. Os pontos
+   de `dados/pontos_quadra.csv` só dizem onde procurar.
+4. **Homografia pelas linhas.** Ajuste que põe cada ponto medido sobre o eixo da sua linha,
+   com a geometria FIVB: linha de 5 cm, as de fronteira dentro da quadra, a de ataque com a
+   borda de trás a 3 m do eixo da central. Ponto a mais de 3 desvios (pela mediana) da sua
+   linha sai e o ajuste refaz: poste, logo e oclusão saem sozinhos.
+5. **Erro fora do ajuste.** Cada linha em terços; cada terço sai do ajuste e é medido contra
+   a sua reta. É esse rms que vai em `reprojection_rms_cm`.
+6. **Intrínsecos.** Focal pelos cruzamentos das linhas medidas, centro ótico no meio da imagem.
+
+Medido na câmera do A4 (`cal-cam0-2`): **1,43 cm fora do ajuste**, 253 pontos de linha. Os
+8 pontos marcados no olho davam 14,7 cm. Uma distorção radial de um termo baixava para
+1,19 cm, mas a 6c pede homografia sobre o pixel bruto, que a distorção não deixa exata;
+fica sem distorção. Refazer quando a câmera se mexer.
+
+Conferência visual: `python conferir_quadra.py` (fora do container; precisa de
+`pip install numpy opencv-python`) reprojeta as linhas conhecidas por cima da foto.
