@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ods.i3.calibration",
+  "description": "Calibração publicada pelo I3 (camada 2) na Especificação de Interfaces 1.0 (Arquitetura 6c): o conteúdo do artefato CALIBRATION de uma câmera. Perfil EV-SINAL sem captured_at e session_id; artifact_version é a versão da calibração.",
+  "$comment": "Payload: schema oficial do B1 (ods-26-2/b1, I3/calibrationEvent.schema.json), sem campos além dos previstos. Envelope: os campos fixos da 6c (seção 3) com os padrões do schema do I1, mais source_id e artifact_version; sequence opcional.",
+  "type": "object",
+  "required": [
+    "message_type",
+    "message_id",
+    "schema",
+    "schema_version",
+    "producer",
+    "published_at",
+    "source_id",
+    "artifact_version",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "message_type": {
+      "type": "string",
+      "const": "event"
+    },
+    "message_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+      "description": "UUID v4 da mensagem; chave de deduplicação no consumidor."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "producer": {
+      "type": "string",
+      "const": "I3"
+    },
+    "published_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+      "description": "Instante da publicação, ISO 8601 UTC com milissegundos."
+    },
+    "schema": {
+      "type": "string",
+      "const": "ods.i3.calibration"
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Câmera calibrada, pelo nome do cadastro da instalação."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "artifact_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Versão da calibração; nunca muda de conteúdo (6c)."
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "valid_from",
+        "image_width",
+        "image_height",
+        "intrinsics",
+        "distortion",
+        "homography_px_to_m",
+        "reference_frame",
+        "reprojection_rms_cm",
+        "holdout_points"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "valid_from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          "description": "A partir de quando a calibração vale para source_id."
+        },
+        "image_width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Resolução para a qual os parâmetros foram calculados."
+        },
+        "image_height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "intrinsics": {
+          "type": "object",
+          "required": [
+            "fx",
+            "fy",
+            "cx",
+            "cy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "fx": {
+              "type": "number"
+            },
+            "fy": {
+              "type": "number"
+            },
+            "cx": {
+              "type": "number"
+            },
+            "cy": {
+              "type": "number"
+            }
+          },
+          "description": "Distância focal e centro ótico, em pixels."
+        },
+        "distortion": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "number"
+          },
+          "description": "[k1, k2, p1, p2, k3]."
+        },
+        "homography_px_to_m": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "Pixel do quadro bruto para metros no plano do chão de space_id; não vale para objetos no ar."
+        },
+        "reference_frame": {
+          "type": "object",
+          "required": [
+            "space_id",
+            "origin",
+            "axes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "space_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "axes": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Sistema de mundo da instalação: nome (o mesmo das zonas) e origem e eixos em texto."
+        },
+        "reprojection_rms_cm": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Erro rms nos pontos de validação, fora do ajuste."
+        },
+        "holdout_points": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pontos reservados para medir o erro."
+        }
+      }
+    }
+  }
+}

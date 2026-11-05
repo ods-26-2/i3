@@ -1,24 +1,20 @@
-"""procedimento de bancada do i3: mede as linhas da quadra na imagem, sem clique
+"""procedimento de bancada da quadra de volei FIVB (o da camera do A4): mede as linhas da
+quadra na imagem, sem clique, e ajusta a homografia que poe cada ponto medido sobre a sua linha
 
-    python medir_linhas.py dados/quadra_mediana.png dados/pontos_quadra.csv > dados/pontos_linhas.csv
-
-parte da calibracao que ja existe (pontos_quadra.csv, medidos no olho) so para saber onde
+e especifico da quadra: o nucleo generico do I3 e homografia.py com um csv de correspondencias
+da instalacao. aqui, os pontos do csv (pontos_quadra.csv, medidos no olho) so dizem onde
 procurar. ao longo de cada linha da quadra, a cada PASSO_M, um perfil perpendicular acha o
-centro da faixa branca no subpixel (centroide do brilho). com esses pontos, ajusta a
-homografia que poe cada um sobre a sua linha (erro ponto-reta), e devolve os cruzamentos das
-linhas -- pontos medidos, no formato de entrada do main.py (u,v,x,y,uso,ponto).
+centro da faixa branca no subpixel (centroide do brilho); com esses pontos, um ajuste poe cada
+um sobre o eixo da sua linha (erro ponto-reta) e devolve os cruzamentos das linhas.
 
 geometria FIVB: linha de 5 cm; as de fronteira sao parte da quadra (borda externa em 0 e
 18 x 9, eixo 2,5 cm para dentro); a de ataque tem a borda de tras a 3 m do eixo da central.
-a imagem deve ser a mediana de varios quadros (sem jogadores): conferir_quadra.py mostra.
+a imagem deve ser a mediana de varios quadros, sem jogadores. o CLI e ferramentas/medir_linhas.py.
 """
-import csv
-import sys
-
 import cv2
 import numpy as np
 
-from i3_geometria import Correspondencia, calibrar
+from geometria.homografia import Correspondencia, calibrar
 
 MEIA = 0.025                                         # meia largura da linha, m
 LINHAS = {                                           # eixo de cada linha no referencial do i3
@@ -159,15 +155,3 @@ def calibrar_por_linhas(img, iniciais):
                 cruzamentos.append(Correspondencia((float(u), float(v)), (float(x), float(y))))
     return H / H[2, 2], erro_fora_do_ajuste(medidas, H0, **kw), cruzamentos, {k: len(v) for k, v in medidas.items()}
 
-
-if __name__ == "__main__":
-    img = cv2.imread(sys.argv[1])
-    antigos = [r for r in csv.DictReader(l for l in open(sys.argv[2]) if not l.startswith("#")) if r["uso"] != "pular"]
-    iniciais = [Correspondencia((float(r["u"]), float(r["v"])), (float(r["x"]), float(r["y"]))) for r in antigos]
-    H, rms, cruzamentos, n = calibrar_por_linhas(img, iniciais)
-    print("# medido em " + sys.argv[1] + ": " + ", ".join(f"{k} {v}" for k, v in n.items()), file=sys.stderr)
-    print(f"# erro fora do ajuste (tercos de linha): rms {rms:.2f} cm", file=sys.stderr)
-    w = csv.writer(sys.stdout)
-    w.writerow(["u", "v", "x", "y", "uso", "ponto"])
-    for c in cruzamentos:
-        w.writerow([round(c.pixel[0], 2), round(c.pixel[1], 2), round(c.mundo[0], 3), round(c.mundo[1], 3), "ajuste", "cruzamento"])

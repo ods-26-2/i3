@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ods.artifact.published",
+  "description": "Anúncio de uma versão de artefato no registro (Arquitetura 6c, ciclo de vida do artefato), como o I3 publica para o CALIBRATION. Perfil EV-SERVIÇO sem campos de sinal; o payload é o descritor comum.",
+  "$comment": "Payload: schema oficial do B1 (ods-26-2/b1, B5/artifactPublishedEvent.schema.json), sem campos além dos previstos.",
+  "type": "object",
+  "required": [
+    "message_type",
+    "message_id",
+    "schema",
+    "schema_version",
+    "producer",
+    "published_at",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "message_type": {
+      "type": "string",
+      "const": "event"
+    },
+    "message_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+      "description": "UUID v4 da mensagem; chave de deduplicação no consumidor."
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "producer": {
+      "type": "string",
+      "const": "I3"
+    },
+    "published_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+      "description": "Instante da publicação, ISO 8601 UTC com milissegundos."
+    },
+    "schema": {
+      "type": "string",
+      "const": "ods.artifact.published"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "artifact_id",
+        "artifact_version",
+        "kind",
+        "owner",
+        "uri",
+        "hash_sha256",
+        "valid_from",
+        "schema_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "MODEL",
+            "CALIBRATION",
+            "ZONES",
+            "RULES",
+            "ROUTING",
+            "PPE_CATALOG",
+            "DEFECT_TAXONOMY",
+            "LEXICON",
+            "KEYPOINT_SEQUENCE"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uri": {
+          "type": "string",
+          "pattern": "^registry://.+"
+        },
+        "hash_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "valid_from": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$"
+        }
+      }
+    }
+  }
+}

@@ -5,34 +5,25 @@ da quadra sobre a imagem. se as linhas desenhadas caem em cima das pintadas, a
 marcacao esta boa; onde escorregam, voce ve quanto e onde -- coisa que um
 rms_cm sozinho nao conta.
 
-    python conferir_quadra.py   (fora do container; pip install numpy opencv-python)
+    python I3/ferramentas/conferir_quadra.py   (fora do container; precisa de numpy e opencv)
 
 corrija os u,v no csv, rode de novo, repita ate encostar.
 """
-import csv
 import pathlib
 import sys
 
 import cv2
 import numpy as np
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from i3_geometria import Correspondencia, calibrar, erro_reprojecao_cm, pixel_para_mundo
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from geometria.entrada import ler  # noqa: E402
+from geometria.homografia import calibrar, erro_reprojecao_cm, pixel_para_mundo  # noqa: E402
 
-RAIZ = pathlib.Path(__file__).resolve().parent
+RAIZ = pathlib.Path(__file__).resolve().parents[2]       # a raiz do repo, onde fica dados/
 # linhas da quadra de volei em metros; homografia leva reta em reta, 2 pontos bastam
 LINHAS = [((0, 0), (18, 0)), ((18, 0), (18, 9)), ((18, 9), (0, 9)), ((0, 9), (0, 0)),
           ((9, 0), (9, 9)), ((6, 0), (6, 9)), ((12, 0), (12, 9))]
 COR = {"ajuste": (0, 255, 0), "holdout": (0, 255, 255)}
-
-
-def ler(caminho):
-    """le o csv ignorando comentario e linha marcada como pular"""
-    linhas = [l for l in open(caminho) if not l.startswith("#")]
-    for r in csv.DictReader(linhas):
-        if r["uso"] != "pular":
-            yield (Correspondencia((float(r["u"]), float(r["v"])), (float(r["x"]), float(r["y"]))),
-                   r["uso"], r["ponto"])
 
 
 def montar_zoom(img, marcas, r=45, amp=4):
@@ -51,7 +42,8 @@ def montar_zoom(img, marcas, r=45, amp=4):
 
 
 def main():
-    marcas = list(ler(RAIZ / "dados/pontos_quadra.csv"))
+    with open(RAIZ / "dados/pontos_quadra.csv", encoding="utf-8") as f:
+        marcas = [(m.correspondencia, m.uso, m.ponto) for m in ler(f)]
     ajuste = [c for c, uso, _ in marcas if uso == "ajuste"]
     holdout = [c for c, uso, _ in marcas if uso == "holdout"]
     if len(ajuste) < 4:

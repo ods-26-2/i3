@@ -1,0 +1,24 @@
+# suite do I3 a cada envio: contratos ods.i3.calibration e ods.artifact.published, homografia,
+# generalizacao para outras instalacoes e a chamada que o B4 usa.
+# nenhum job publica no Kafka.
+name: i3-tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Suite (homografia, entrada, artefato, generalizacao, quadra do A4, linha de comando)
+        run: python -m unittest discover -s I3/tests -t I3 -v

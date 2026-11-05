@@ -1,93 +1,126 @@
-# I3 · geometria de câmera
+# I3 · geometria e calibração de câmera
 
-Parte do INV-1 · ODS 2026/2. O squad tem três componentes, cada um no seu repositório
-e no seu container: [I2](https://github.com/ods-26-2/i2) (identidade e rastreio), [I3](https://github.com/ods-26-2/i3) (geometria e
-calibração) e [A4](https://github.com/ods-26-2/a4) (arbitragem). Nenhum importa o outro: eles conversam pelo
-Kafka do projeto, no envelope de `docs/INV-1_interfaces.md`, seguindo o guia
-`docs/Guia_Kafka_B2_v2.pdf`. A cadeia completa está no README do [A4](https://github.com/ods-26-2/a4).
+[![i3-tests](https://github.com/ods-26-2/i3/actions/workflows/i3-tests.yml/badge.svg)](https://github.com/ods-26-2/i3/actions/workflows/i3-tests.yml)
 
-Só numpy + cliente Kafka.
+**Converte o que a câmera vê em medidas do mundo real.** Componente da camada 2 (inferência) do
+ODS 2026/2, do squad INV-1. Produz o artefato **CALIBRATION** de cada câmera: intrínsecos,
+distorção e a homografia do pixel bruto para metros no plano do chão. É artefato versionado, não
+serviço: o I3 roda quando a câmera é instalada ou se mexe, e o resultado fica no registro.
 
-## Rodar
-
+```mermaid
+flowchart LR
+    C["correspondências<br/>medidas na instalação"] --> I3["<b>I3</b>"]
+    I3 -->|ods.i3.calibration| S1["S1 · S5 · I9"]
+    I3 -->|ods.i3.calibration| A["A4 · A8"]
+    I3 -->|registro + ods.artifact.published| R[("registro de artefatos")]
 ```
+
+Serve a qualquer instalação. A 6c calibra na 1.0 as câmeras do A4 (quadra), do A8
+(estacionamento) e do A5 (galpão): o I3 fornece o procedimento genérico, e cada aplicação
+fornece as medidas e o referencial da sua instalação.
+
+## Início rápido
+
+```bash
 docker build -t inv-i3 .
-docker run -i --rm inv-i3 < dados/pontos_quadra.csv > calibracao.json   # local, em arquivo
-docker run -i --rm inv-i3 --kafka 34.66.235.91:9093 < dados/pontos_quadra.csv   # barramento
-docker run -i --rm -v $PWD/dados:/dados inv-i3 --linhas /dados/quadra_mediana.png \
-    < dados/pontos_quadra.csv > calibracao.json                                  # linhas medidas
+docker run -i --rm inv-i3 --source-id cam0 < correspondencias.csv > calibracao.json
+docker run -i --rm --network host inv-i3 --source-id cam0 --kafka localhost:9092 < correspondencias.csv
+#   Kafka da Jetson (rede do DCOMP): --kafka 172.18.4.56:9092
 ```
 
-Entrada (stdin): o csv de `dados/pontos_quadra.csv` (`u,v,x,y,uso,ponto`; `uso` é
-`ajuste`, `holdout` ou `pular`). Saída: **um** evento JSON no stdout, ou no tópico de mesmo nome com `--kafka`,
-`ods.i3.calibration`, no envelope e no payload da arquitetura 6c. É artefato: grava em
-arquivo e quem consome lê quando quiser. Opções: `--source-id`, `--versao` (padrão
-`cal-<source_id>-1`), `--largura`, `--altura`, `--valido-desde`, `--espaco`, `--linhas`
-(mede as linhas da quadra numa imagem; ver o procedimento abaixo), `--registro PASTA`.
+**Entrada (stdin):** um csv `u,v,x,y,uso,ponto`. `u,v` em pixels do quadro bruto; `x,y` em metros
+no plano do chão; `uso` é `ajuste` (entra no cálculo), `holdout` (só mede o erro) ou `pular`
+(ocluso). São necessários 4 pontos de ajuste e pelo menos 1 de holdout. Linhas com `#` são
+comentário.
 
-Ciclo de vida do artefato (6c, seção 8): com `--registro`, o CALIBRATION vai para o registro
-com o descritor comum (`artifact_id`, `artifact_version`, `kind`, `owner`, `uri`,
-`hash_sha256`, `valid_from`), em `<PASTA>/i3/calibration/<versao>/`, no formato
-`registry://` que o S1 lê em `S1_REGISTRY_DIR`. Com `--kafka`, o conteúdo sai em
-`ods.i3.calibration` e a versão é anunciada em `ods.artifact.published`. Versão gravada não
-muda: correção é `--versao` nova.
+**Saída:** um evento `ods.i3.calibration` no envelope da 6c, validado contra
+[`schemas/`](schemas/) antes de sair. Vai para o stdout como arquivo; com `--kafka`, para o tópico
+de mesmo nome, chave `source_id`.
 
-`holdout_points` é o número de pontos de linha medidos fora do ajuste (cada um no seu terço
-de linha); `reprojection_rms_cm` é o rms desses pontos até a sua reta.
+O passo a passo está em [HOW_TO_RUN.md](HOW_TO_RUN.md); o contrato, a semântica e a operação, em
+[docs/CONTRATO.md](docs/CONTRATO.md).
 
-Na 6c o P4 entrega o quadro bruto, então o artefato leva intrínsecos e distorção. Hoje a focal
-sai dos próprios pontos da quadra (uma vista, centro no meio, distorção zero); na Jetson a
-lente é fixa e a calibração com tabuleiro é feita uma vez. Consumidores: S1, S5, I9, A4, A8.
+## Opções
 
-**Entrada** `Correspondencia(pixel, mundo)`
+| opção | para quê |
+|---|---|
+| `--source-id` | a câmera, pelo nome do cadastro da instalação |
+| `--versao` | `artifact_version` (padrão `cal-<source_id>-1`); uma versão nunca muda de conteúdo |
+| `--espaco`, `--origem`, `--eixos` | o referencial da instalação: `space_id` (o mesmo das zonas) e, em texto, onde fica a origem e como correm os eixos |
+| `--largura`, `--altura` | tamanho do quadro calibrado (com `--linhas`, o da imagem) |
+| `--valido-desde` | ISO 8601 com fuso; padrão é agora |
+| `--registro PASTA` | grava o CALIBRATION no registro com o descritor comum; com `--kafka`, anuncia em `ods.artifact.published` |
+| `--kafka HOST:PORTA` | publica no broker em vez do stdout |
+| `--linhas IMAGEM` | quadra de vôlei: mede as linhas na imagem (procedimento de bancada abaixo) |
 
-| campo | formato | de onde vem |
-|---|---|---|
-| `pixel` | `(u, v)` em px | ponto marcado na imagem |
-| `mundo` | `(x, y)` em m | medida real da quadra, do regulamento |
+## Uma calibração por aplicação
 
-**Saída** `Calibracao(camera_id, homografia, referencial, rms_cm, valido_desde, versao)`
+```bash
+# A8, estacionamento: cada câmera do pátio com o mesmo space_id
+docker run -i --rm inv-i3 --source-id cam-patio-2 --versao cal-cam-patio-2-1 --espaco patio-1 \
+    --origem "canto sudoeste do patio" --eixos "x ao longo da rua, y para o fundo" < patio_cam2.csv
 
-| campo | formato | por que existe |
-|---|---|---|
-| `homografia` | matriz 3×3 | imagem → plano |
-| `referencial` | `Referencial(origem, eixos, unidade)` | tem que bater com o de S1 |
-| `rms_cm` | float | medido em holdout, em cm |
-| `valido_desde` / `versao` | data / str | consumidor precisa dizer qual usou |
+# A4, vôlei: o referencial que a regra do A4 usa (origem no canto, x ao longo dos 18 m)
+docker run -i --rm -v $PWD/dados:/dados inv-i3 --source-id cam0 --versao cal-cam0-2 --espaco quadra-volei-fivb \
+    --origem "canto proximo esquerdo" --eixos "x ao longo dos 18 m, y afastando da camera" \
+    --linhas /dados/quadra_mediana.png < dados/pontos_quadra.csv
+```
 
-**O que importa**
+## A métrica
 
-- É artefato versionado, não serviço em runtime. Sai uma tupla mais a função pura
-  `pixel_para_mundo()`. Serviço criaria acoplamento em execução com LIB-1 e VER-5.
-- Erro medido nos pontos do ajuste é otimista por construção — deu 0,3 cm contra
-  0,9 cm em pontos novos. A métrica é a do holdout, em centímetro, não em pixel.
-  O procedimento que produz esse número está no fim deste arquivo.
-- Refazer quando a câmera se mexe.
+**Erro de reprojeção fora do ajuste, em centímetros no plano:** o rms de pontos conhecidos que
+não entraram no cálculo. O erro nos pontos do ajuste é otimista por construção (0,3 cm contra
+0,9 cm em pontos novos, na primeira medição). Vai em `reprojection_rms_cm`, com o número de pontos
+em `holdout_points`.
 
-## Procedimento de bancada · card I3.3
+## Procedimento de bancada · quadra do A4 (card I3.3)
 
-O padrão é a própria quadra de vôlei FIVB, 18 × 9 m. As linhas são medidas na imagem, sem
-clique (`medir_linhas.py`, opção `--linhas` do `main.py`):
+O padrão é a própria quadra de vôlei FIVB, 18 × 9 m. As linhas são medidas na imagem, sem clique
+(`I3/geometria/quadra_volei.py`, opção `--linhas`):
 
-1. **Câmera fixa.** Conferir que a quadra não anda entre trechos do jogo (na câmera do A4,
-   menos de 1 px em 8 min). Se andar, uma calibração por trecho.
+1. **Câmera fixa.** Conferir que a quadra não anda entre trechos do jogo (na câmera do A4, menos
+   de 1 px em 8 min). Se andar, uma calibração por trecho.
 2. **Imagem sem jogadores.** Mediana de dezenas de quadros espalhados pelo jogo
    (`dados/quadra_mediana.png`: 80 quadros do vídeo do A4).
-3. **Linhas no subpixel.** A cada 25 cm ao longo de cada linha (laterais, fundos e ataques),
-   um perfil perpendicular acha o centro da faixa branca pelo centróide do brilho. Os pontos
-   de `dados/pontos_quadra.csv` só dizem onde procurar.
-4. **Homografia pelas linhas.** Ajuste que põe cada ponto medido sobre o eixo da sua linha,
-   com a geometria FIVB: linha de 5 cm, as de fronteira dentro da quadra, a de ataque com a
-   borda de trás a 3 m do eixo da central. Ponto a mais de 3 desvios (pela mediana) da sua
-   linha sai e o ajuste refaz: poste, logo e oclusão saem sozinhos.
-5. **Erro fora do ajuste.** Cada linha em terços; cada terço sai do ajuste e é medido contra
-   a sua reta. É esse rms que vai em `reprojection_rms_cm`.
+3. **Linhas no subpixel.** A cada 25 cm ao longo de cada linha (laterais, fundos e ataques), um
+   perfil perpendicular acha o centro da faixa branca pelo centroide do brilho. Os pontos de
+   `dados/pontos_quadra.csv` só dizem onde procurar.
+4. **Homografia pelas linhas.** Ajuste que põe cada ponto medido sobre o eixo da sua linha, com a
+   geometria FIVB: linha de 5 cm, as de fronteira dentro da quadra, a de ataque com a borda de trás
+   a 3 m do eixo da central. Ponto a mais de 3 desvios (pela mediana) da sua linha sai e o ajuste
+   refaz: poste, logo e oclusão saem sozinhos.
+5. **Erro fora do ajuste.** Cada linha em terços; cada terço sai do ajuste e é medido contra a sua
+   reta. É esse rms que vai em `reprojection_rms_cm`.
 6. **Intrínsecos.** Focal pelos cruzamentos das linhas medidas, centro ótico no meio da imagem.
 
-Medido na câmera do A4 (`cal-cam0-2`): **1,43 cm fora do ajuste**, 253 pontos de linha. Os
-8 pontos marcados no olho davam 14,7 cm. Uma distorção radial de um termo baixava para
-1,19 cm, mas a 6c pede homografia sobre o pixel bruto, que a distorção não deixa exata;
-fica sem distorção. Refazer quando a câmera se mexer.
+Medido na câmera do A4 (`cal-cam0-2`): **1,43 cm fora do ajuste**, 253 pontos de linha. Os 8
+pontos marcados no olho davam 14,7 cm. Uma distorção radial de um termo baixava para 1,19 cm, mas
+a 6c pede homografia sobre o pixel bruto, que a distorção não deixa exata; fica sem distorção.
 
-Conferência visual: `python conferir_quadra.py` (fora do container; precisa de
-`pip install numpy opencv-python`) reprojeta as linhas conhecidas por cima da foto.
+Ferramentas de bancada (fora do container, precisam de numpy e opencv):
+`I3/ferramentas/conferir_quadra.py` reprojeta a quadra sobre a foto e
+`I3/ferramentas/medir_linhas.py` escreve os cruzamentos medidos como csv.
+
+## Estrutura
+
+```
+I3/
+├── geometria/
+│   ├── homografia.py    DLT normalizado, pixel -> mundo, erro de reprojeção (núcleo genérico)
+│   ├── intrinsecos.py   focal pelos pontos do plano
+│   ├── entrada.py       o csv de correspondências, com erro por linha
+│   ├── artefato.py      evento ods.i3.calibration, registro e anúncio
+│   ├── contrato.py      validação contra os schemas
+│   ├── publicacao.py    stdout ou Kafka
+│   └── quadra_volei.py  procedimento de bancada da quadra FIVB (A4)
+├── ferramentas/         conferir_quadra.py e medir_linhas.py (bancada do A4)
+├── tests/               suíte (python -m unittest discover -s I3/tests -t I3)
+└── run_calibracao.py    linha de comando
+schemas/                 ods.i3.calibration e ods.artifact.published, com exemplos válidos e inválidos
+dados/                   a instalação do A4: pontos, imagem mediana e conferência
+main.py                  ponto de entrada (Docker, B4, cadeia)
+```
+
+Parte do INV-1 · ODS 2026/2, com [I2](https://github.com/ods-26-2/i2) (identidade e rastreio) e
+[A4](https://github.com/ods-26-2/a4) (arbitragem). Nenhum importa o outro: eles conversam pelo
+Kafka, no envelope da Arquitetura 6c.

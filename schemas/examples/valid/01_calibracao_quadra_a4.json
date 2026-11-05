@@ -1,0 +1,53 @@
+{
+  "message_type": "event",
+  "message_id": "5f1e2c7a-9b1d-4e0a-8c6f-2d3a4b5c6d7e",
+  "schema": "ods.i3.calibration",
+  "schema_version": "1.0",
+  "producer": "I3",
+  "published_at": "2026-09-23T14:00:05.120Z",
+  "source_id": "cam0",
+  "sequence": 0,
+  "artifact_version": "cal-cam0-2",
+  "payload": {
+    "valid_from": "2026-09-23T14:00:00.000Z",
+    "image_width": 1280,
+    "image_height": 720,
+    "intrinsics": {
+      "fx": 769.8,
+      "fy": 769.8,
+      "cx": 640.0,
+      "cy": 360.0
+    },
+    "distortion": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "homography_px_to_m": [
+      [
+        -0.030751298447490593,
+        -0.044151599393918,
+        29.117014839931866
+      ],
+      [
+        -0.0005198636842128866,
+        0.06315832274270933,
+        -37.65724793119675
+      ],
+      [
+        6.480200230982271e-05,
+        -0.0048986337701138844,
+        1.0
+      ]
+    ],
+    "reference_frame": {
+      "space_id": "quadra-volei-fivb",
+      "origin": "canto proximo esquerdo",
+      "axes": "x ao longo dos 18 m, y afastando da camera"
+    },
+    "reprojection_rms_cm": 1.43,
+    "holdout_points": 253
+  }
+}

@@ -1,0 +1,7 @@
+.git
+.github
+.venv
+docs
+dados
+**/__pycache__
+I3/tests
