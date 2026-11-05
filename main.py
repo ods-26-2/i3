@@ -105,7 +105,8 @@ def evento(marcas, a):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--source-id", default="cam-ref")
+    # --camera-id: nome de antes da 6c, ainda usado pela suite do B4
+    p.add_argument("--source-id", "--camera-id", dest="source_id", default="cam-ref")
     p.add_argument("--versao", help="padrao e cal-<source_id>-1")
     p.add_argument("--largura", type=int, default=1280, help="resolucao do quadro calibrado")
     p.add_argument("--altura", type=int, default=720)
