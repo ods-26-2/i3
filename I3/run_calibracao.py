@@ -85,6 +85,10 @@ def medir(marcas, a):
 
 def main(argv=None):
     a = argumentos(argv)
+    if a.kafka and not a.registro:
+        # 6c, secao 3: publicar e gravar no registro, anunciar a versao e mandar o conteudo; so o
+        # topico, com a retencao do broker, deixa sem calibracao quem sobe depois
+        falhar("--kafka exige --registro: o CALIBRATION vai para o registro e e anunciado (6c, secao 3)")
     try:
         marcas = ler(sys.stdin)
     except ValueError as erro:

@@ -40,6 +40,8 @@ nova.
 - O CALIBRATION vai para `<registro>/i3/calibration/<versao>/` (`content.json` e
   `descriptor.json`), no formato `registry://` que o S1 lê em `S1_REGISTRY_DIR`.
 - O conteúdo sai em `ods.i3.calibration` e a versão é anunciada em `ods.artifact.published`.
+  Os dois juntos, como no ciclo de vida da 6c (seção 3): `--kafka` sem `--registro` é recusado,
+  porque quem sobe depois carrega a versão do registro, não do tópico.
 - Se o broker falhar, rode de novo com o mesmo `--valido-desde`: o registro reconhece o mesmo
   conteúdo e só anuncia de novo. Conteúdo diferente com a mesma versão é recusado.
 - **Kafka local:** `docker compose up -d` no repo do [A4](https://github.com/ods-26-2/a4).

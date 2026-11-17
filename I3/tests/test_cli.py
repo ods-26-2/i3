@@ -71,6 +71,11 @@ class Registro(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("versao nao muda", r.stderr)
 
+    def test_publicar_sem_registro_e_recusado(self):
+        r = rodar("--source-id", "cam0", "--kafka", "localhost:1")    # recusa antes de abrir o broker
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--registro", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
