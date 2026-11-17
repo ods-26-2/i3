@@ -51,7 +51,9 @@ O passo a passo está em [HOW_TO_RUN.md](HOW_TO_RUN.md); o contrato, a semântic
 | `--valido-desde` | ISO 8601 com fuso; padrão é agora |
 | `--registro PASTA` | grava o CALIBRATION no registro com o descritor comum; com `--kafka`, anuncia em `ods.artifact.published` |
 | `--kafka HOST:PORTA` | publica no broker em vez do stdout |
-| `--linhas IMAGEM` | quadra de vôlei: mede as linhas na imagem (procedimento de bancada abaixo) |
+| `--linhas IMAGEM` | mede as linhas pintadas do chão nessa imagem, sem clique (seção abaixo) |
+| `--padrao ARQUIVO` | com `--linhas`: o desenho das linhas do chão em metros (`padroes/`) |
+| `--perto LINHA` | com `--linhas`: a linha do padrão mais perto da câmera, quando o desenho é simétrico |
 
 ## Uma calibração por aplicação
 
@@ -61,9 +63,9 @@ docker run -i --rm inv-i3 --source-id cam-patio-2 --versao cal-cam-patio-2-1 --e
     --origem "canto sudoeste do patio" --eixos "x ao longo da rua, y para o fundo" < patio_cam2.csv
 
 # A4, vôlei: o referencial que a regra do A4 usa (origem no canto, x ao longo dos 18 m)
-docker run -i --rm -v $PWD/dados:/dados inv-i3 --source-id cam0 --versao cal-cam0-2 --espaco quadra-volei-fivb \
+docker run -i --rm -v $PWD/dados:/dados inv-i3 --source-id cam0 --versao cal-cam0-3 --espaco quadra-volei-fivb \
     --origem "canto proximo esquerdo" --eixos "x ao longo dos 18 m, y afastando da camera" \
-    --linhas /dados/quadra_mediana.png < dados/pontos_quadra.csv
+    --linhas /dados/quadra_mediana.png --padrao padroes/quadra-volei-fivb.json --perto "lateral y=0" < /dev/null
 ```
 
 ## A métrica
@@ -73,18 +75,39 @@ não entraram no cálculo. O erro nos pontos do ajuste é otimista por construç
 0,9 cm em pontos novos, na primeira medição). Vai em `reprojection_rms_cm`, com o número de pontos
 em `holdout_points`.
 
-## Procedimento de bancada · quadra do A4 (card I3.3)
+## Calibração pelas linhas do chão, sem clique
 
-O padrão é a própria quadra de vôlei FIVB, 18 × 9 m. As linhas são medidas na imagem, sem clique
-(`I3/geometria/quadra_volei.py`, opção `--linhas`):
+Serve a qualquer instalação com faixas pintadas no chão: quadra, vagas de estacionamento, marcas
+de piso (`I3/geometria/linhas.py`, opções `--linhas`, `--padrao` e `--perto`).
+
+- **O padrão é da instalação.** Um json com as linhas em metros, no referencial que vai no
+  CALIBRATION (destro, z para cima): `{"nome": ..., "linhas": [{"nome", "de": [x, y], "ate": [x, y]}]}`,
+  com pelo menos 2 linhas em cada uma de duas direções. A quadra FIVB é
+  `padroes/quadra-volei-fivb.json`; as vagas de um pátio são outro arquivo, da aplicação.
+- **O I3 acha o padrão na imagem.** Os trechos contínuos de faixa clara viram retas; cada 2 retas
+  casadas com 2 linhas de uma direção e 2 da outra dão uma homografia, que vale pelo quanto do
+  padrão projetado cai sobre faixa. A câmera está acima do chão, então o padrão nunca aparece
+  espelhado. Desenho simétrico (a quadra) aparece de dois jeitos: `--perto` diz qual linha fica
+  mais perto da câmera, e o I3 recusa sem ela.
+- **Pontos no olho são opcionais.** Um csv no stdin, se vier, substitui a busca como ponto de
+  partida.
+
+Na quadra do A4, sem clique: os cantos caem a 0,3 px dos da medição com os pontos no olho, com
+1,21 cm fora do ajuste (1,43 cm partindo dos pontos; a diferença é o conjunto de pontos de linha
+que entra, não uma calibração melhor). Os testes também calibram, em imagens sintéticas com
+logo, faixa de outra modalidade e manchas, a quadra e um pátio de 6 vagas.
+
+### Procedimento de bancada · quadra do A4 (card I3.3)
+
+O padrão é a própria quadra de vôlei FIVB, 18 × 9 m:
 
 1. **Câmera fixa.** Conferir que a quadra não anda entre trechos do jogo (na câmera do A4, menos
    de 1 px em 8 min). Se andar, uma calibração por trecho.
 2. **Imagem sem jogadores.** Mediana de dezenas de quadros espalhados pelo jogo
    (`dados/quadra_mediana.png`: 80 quadros do vídeo do A4).
 3. **Linhas no subpixel.** A cada 25 cm ao longo de cada linha (laterais, fundos e ataques), um
-   perfil perpendicular acha o centro da faixa branca pelo centroide do brilho. Os pontos de
-   `dados/pontos_quadra.csv` só dizem onde procurar.
+   perfil perpendicular acha o centro da faixa branca pelo centroide do brilho, a partir da
+   quadra achada na imagem (ou dos pontos de `dados/pontos_quadra.csv`).
 4. **Homografia pelas linhas.** Ajuste que põe cada ponto medido sobre o eixo da sua linha, com a
    geometria FIVB: linha de 5 cm, as de fronteira dentro da quadra, a de ataque com a borda de trás
    a 3 m do eixo da central. Ponto a mais de 3 desvios (pela mediana) da sua linha sai e o ajuste
@@ -99,7 +122,7 @@ a 6c pede homografia sobre o pixel bruto, que a distorção não deixa exata; fi
 
 Ferramentas de bancada (fora do container, precisam de numpy e opencv):
 `I3/ferramentas/conferir_quadra.py` reprojeta a quadra sobre a foto e
-`I3/ferramentas/medir_linhas.py` escreve os cruzamentos medidos como csv.
+`I3/ferramentas/medir_linhas.py` escreve os cruzamentos das linhas medidas como csv.
 
 ## Estrutura
 
@@ -112,10 +135,11 @@ I3/
 │   ├── artefato.py      evento ods.i3.calibration, registro e anúncio
 │   ├── contrato.py      validação contra os schemas
 │   ├── publicacao.py    stdout ou Kafka
-│   └── quadra_volei.py  procedimento de bancada da quadra FIVB (A4)
+│   └── linhas.py        calibração pelas linhas pintadas do chão, sem clique
 ├── ferramentas/         conferir_quadra.py e medir_linhas.py (bancada do A4)
 ├── tests/               suíte (python -m unittest discover -s I3/tests -t I3)
 └── run_calibracao.py    linha de comando
+padroes/                 desenhos de linhas do chão em metros (quadra FIVB)
 schemas/                 ods.i3.calibration e ods.artifact.published, com exemplos válidos e inválidos
 dados/                   a instalação do A4: pontos, imagem mediana e conferência
 main.py                  ponto de entrada (Docker, B4, cadeia)

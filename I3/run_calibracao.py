@@ -4,13 +4,19 @@
     docker run -i --rm --network host inv-i3 --source-id cam0 --kafka localhost:9092 < correspondencias.csv
 
 entrada (stdin): csv u,v,x,y,uso,ponto (geometria/entrada.py), medido na instalacao; precisa de
-4 pontos de ajuste e de pelo menos 1 de holdout, que mede o erro. com --linhas, a quadra de
-volei e medida na imagem (geometria/quadra_volei.py) e o csv so diz onde procurar.
+4 pontos de ajuste e de pelo menos 1 de holdout, que mede o erro.
+pelas linhas do chao, sem clique (geometria/linhas.py): --linhas IMAGEM --padrao ARQUIVO; o padrao
+e o desenho das linhas em metros (padroes/), e --perto diz qual linha fica mais perto da camera
+quando o desenho e simetrico. um csv no stdin, se vier, so diz onde procurar:
+
+    docker run -i --rm -v $PWD/dados:/dados inv-i3 --source-id cam0 --linhas /dados/quadra_mediana.png \
+        --padrao padroes/quadra-volei-fivb.json --perto "lateral y=0" < /dev/null
 saida: o evento ods.i3.calibration (6c) no stdout, como arquivo; com --kafka, no topico de mesmo
 nome, chave source_id. com --registro, grava o CALIBRATION com o descritor comum e, com
 --kafka, anuncia a versao em ods.artifact.published.
 """
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 
@@ -56,25 +62,19 @@ def argumentos(argv=None):
     p.add_argument("--registro", metavar="PASTA",
                    help="registro de artefatos (6c): grava CALIBRATION com descritor; com --kafka, anuncia")
     p.add_argument("--linhas", metavar="IMAGEM",
-                   help="quadra de volei: mede as linhas nessa imagem (mediana sem jogadores)")
+                   help="mede as linhas pintadas do chao nessa imagem (mediana sem gente), sem clique")
+    p.add_argument("--padrao", metavar="ARQUIVO", help="com --linhas: as linhas do chao em metros (padroes/)")
+    p.add_argument("--perto", metavar="LINHA", help="com --linhas: a linha do padrao mais perto da camera")
     return p.parse_args(argv)
 
 
 def medir(marcas, a):
-    """(H, rms_cm, n_holdout, K, dist, largura, altura) pelo csv ou pelas linhas da quadra"""
+    """(H, rms_cm, n_holdout, K, dist, largura, altura) pelo csv ou pelas linhas do chao"""
     pontos = separar(marcas)
+    if a.linhas:
+        return pelas_linhas(pontos, a)
     if len(pontos["ajuste"]) < 4:
         falhar(f"sao necessarios 4 pontos de ajuste, o csv tem {len(pontos['ajuste'])}")
-    if a.linhas:
-        import cv2
-        from geometria.quadra_volei import calibrar_por_linhas
-        img = cv2.imread(a.linhas)
-        if img is None:
-            falhar(f"nao consegui abrir a imagem {a.linhas}")
-        altura, largura = img.shape[:2]
-        H, rms, cruzamentos, medidos = calibrar_por_linhas(img, pontos["ajuste"] + pontos["holdout"])
-        K, dist = intrinsecos(cruzamentos, largura, altura)
-        return H, rms, sum(medidos.values()), K, dist, largura, altura
     if not pontos["holdout"]:
         falhar("o csv nao tem ponto de holdout; sem ele nao ha erro de reprojecao, que a 6c exige")
     H = calibrar(pontos["ajuste"])
@@ -83,14 +83,38 @@ def medir(marcas, a):
             a.largura, a.altura)
 
 
+def pelas_linhas(pontos, a):
+    import cv2
+    from geometria.linhas import calibrar_por_linhas, padrao
+    img = cv2.imread(a.linhas)
+    if img is None:
+        falhar(f"nao consegui abrir a imagem {a.linhas}")
+    iniciais = pontos["ajuste"] + pontos["holdout"]
+    if iniciais and len(pontos["ajuste"]) < 4:
+        falhar(f"sao necessarios 4 pontos de ajuste, o csv tem {len(pontos['ajuste'])}")
+    try:
+        with open(a.padrao, encoding="utf-8") as arquivo:
+            linhas = padrao(json.load(arquivo))
+        H, rms, cruzamentos, medidos = calibrar_por_linhas(img, linhas, iniciais or None, a.perto)
+    except (OSError, ValueError, KeyError) as erro:
+        falhar(f"padrao {a.padrao}: {erro}")
+    altura, largura = img.shape[:2]
+    K, dist = intrinsecos(cruzamentos, largura, altura)
+    return H, rms, sum(medidos.values()), K, dist, largura, altura
+
+
 def main(argv=None):
     a = argumentos(argv)
     if a.kafka and not a.registro:
         # 6c, secao 3: publicar e gravar no registro, anunciar a versao e mandar o conteudo; so o
         # topico, com a retencao do broker, deixa sem calibracao quem sobe depois
         falhar("--kafka exige --registro: o CALIBRATION vai para o registro e e anunciado (6c, secao 3)")
+    if a.linhas and not a.padrao:
+        falhar("--linhas precisa de --padrao, o arquivo com as linhas do chao em metros (padroes/)")
+    # pelas linhas o csv e opcional: so le o stdin se ele nao for o terminal
+    texto = "" if a.linhas and sys.stdin.isatty() else sys.stdin.read()
     try:
-        marcas = ler(sys.stdin)
+        marcas = ler(texto.splitlines(keepends=True)) if texto.strip() or not a.linhas else []
     except ValueError as erro:
         falhar(f"csv de correspondencias: {erro}")
     H, rms, n_holdout, K, dist, largura, altura = medir(marcas, a)

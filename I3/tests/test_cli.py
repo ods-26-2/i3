@@ -9,6 +9,7 @@ from pathlib import Path
 from geometria import contrato
 
 RAIZ = Path(__file__).resolve().parents[2]
+FIVB = RAIZ / "padroes" / "quadra-volei-fivb.json"
 
 # a chamada exata da suite do B4 (ods-26-2/b4, tests/integration/i3/test_i3.py)
 CSV_B4 = (
@@ -47,7 +48,7 @@ class Erros(unittest.TestCase):
         self.assertIn("holdout", r.stderr)
 
     def test_imagem_inexistente_com_linhas(self):
-        r = rodar("--linhas", "/nao/existe.png")
+        r = rodar("--linhas", "/nao/existe.png", "--padrao", str(FIVB))
         self.assertEqual(r.returncode, 2)
         self.assertIn("nao consegui abrir a imagem", r.stderr)
 
@@ -59,6 +60,21 @@ class Erros(unittest.TestCase):
     def test_valido_desde_sem_fuso_e_recusado(self):
         r = rodar("--valido-desde", "2026-09-23T14:00:00")
         self.assertEqual(r.returncode, 2)
+
+
+class SemClique(unittest.TestCase):
+    def test_quadra_do_a4_pelas_linhas_sem_csv(self):
+        r = rodar("--source-id", "cam0", "--espaco", "quadra-volei-fivb", "--linhas", "dados/quadra_mediana.png",
+                  "--padrao", str(FIVB), "--perto", "lateral y=0", entrada="")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        ev = json.loads(r.stdout)
+        self.assertEqual(contrato.erros(ev), [])
+        self.assertLess(ev["payload"]["reprojection_rms_cm"], 1.5)
+
+    def test_linhas_sem_padrao_e_recusado(self):
+        r = rodar("--linhas", "dados/quadra_mediana.png", entrada="")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--padrao", r.stderr)
 
 
 class Registro(unittest.TestCase):

@@ -1,0 +1,13 @@
+{
+  "nome": "quadra de volei FIVB, 18 x 9 m",
+  "referencial": "origem no canto externo da quadra; x ao longo dos 18 m, y ao longo dos 9 m; destro, z para cima",
+  "nota": "eixo de cada faixa de 5 cm. as de fronteira sao parte da quadra (borda externa em 0 e em 18 x 9); a de ataque tem a borda de tras a 3 m do eixo da central. a central fica de fora: o poste da rede e a cadeira do arbitro tapam",
+  "linhas": [
+    {"nome": "lateral y=0", "de": [0, 0.025], "ate": [18, 0.025]},
+    {"nome": "lateral y=9", "de": [0, 8.975], "ate": [18, 8.975]},
+    {"nome": "fundo x=0", "de": [0.025, 0], "ate": [0.025, 9]},
+    {"nome": "ataque x=6", "de": [6.025, 0], "ate": [6.025, 9]},
+    {"nome": "ataque x=12", "de": [11.975, 0], "ate": [11.975, 9]},
+    {"nome": "fundo x=18", "de": [17.975, 0], "ate": [17.975, 9]}
+  ]
+}

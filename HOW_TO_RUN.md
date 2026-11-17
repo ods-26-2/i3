@@ -50,11 +50,16 @@ nova.
 ## 4. Quadra de vôlei (A4)
 
 ```bash
-.venv/bin/python main.py --source-id cam0 --versao cal-cam0-2 --espaco quadra-volei-fivb \
+.venv/bin/python main.py --source-id cam0 --versao cal-cam0-3 --espaco quadra-volei-fivb \
     --origem "canto proximo esquerdo" --eixos "x ao longo dos 18 m, y afastando da camera" \
-    --linhas dados/quadra_mediana.png < dados/pontos_quadra.csv
+    --linhas dados/quadra_mediana.png --padrao padroes/quadra-volei-fivb.json --perto "lateral y=0" < /dev/null
 .venv/bin/python I3/ferramentas/conferir_quadra.py        # desenha a quadra reprojetada em dados/
 ```
+
+Sem clique: o I3 acha a quadra na imagem pelo desenho em `padroes/`. A quadra é simétrica, então
+`--perto` diz qual lateral fica do lado da câmera; com ela e o referencial destro, a origem cai no
+canto próximo esquerdo. Com `< dados/pontos_quadra.csv` no lugar de `< /dev/null`, os pontos
+medidos no olho viram o ponto de partida.
 
 O `space_id` e o referencial têm que ser esses: são os que as zonas do A4 e a regra de dentro e
 fora usam.
